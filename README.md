@@ -559,7 +559,10 @@ FUNCTION logKeyStroke(keylogBuffer){
 | CommanderStopped       | END                     |
 
 ##### System Wide State Transition Diagram: Commander
-![System Wide State Transition Diagram](./docs/images/20-system-wide-state-transition-diagram.png)
+![System Wide State Transition Diagram: Commander](./docs/images/20-system-wide-state-transition-diagram.png)
+
+##### System Wide State Transition Diagram: Victim
+![system wide State Transition Diagram: Victim](./docs/images/21-system-wide-state-transition-diagram-vicitim.png)
 
 
 
