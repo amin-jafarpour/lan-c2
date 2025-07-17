@@ -1,0 +1,9 @@
+{
+	"IfaceStr": "wlp164s0",
+	"SrcMACStr": "a4:42:3b:4d:9d:2e", 
+	"DstMACStr": "c8:15:4e:d3:07:1b",
+	"SrcIPStr": "10.0.0.3",
+	"DstIPStr": "10.0.0.2",
+	"SrcPortInt": 	8888,
+	"DstPortInt": 	9999
+}
