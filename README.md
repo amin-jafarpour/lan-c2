@@ -784,8 +784,10 @@ Enter ‘c’ or ‘clear’ to clear the commander's screen.
 
 If the error message, “parseRSTACK failed: key corrupted” is shown, the commander and the victim are out of synchronisation, and the commander has one or more state packets from the victim in its buffer. Enter ‘f’ or ‘flush’ to flush out the stale packets.
 
-
-
+### Lan-c2 Detection and Prevention
+Finally the Malware Detection and Prevention document explains the methods and technologies used to 
+detect and prevent the aforementioned malware. Access the document below:
+[Malware Detection and Prevention](./docs/malware-detection-and-prevention.pdf)
 
 
 
