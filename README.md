@@ -667,6 +667,7 @@ FUNCTION logKeyStroke(keylogBuffer){
 
 ### User Guide
 #### Directory Organization
+```
 The structure of the source directory is as follows: 
 ./c2/ 
 	./c2/commander.go
@@ -689,7 +690,7 @@ The structure of the source directory is as follows:
 		./c2/util/keylogger.go
 		./c2/util/rshell.go
 		./c2/util/session.go
-
+```
 
 The following table explains the purpose of each file and directory within the source directory: 
 
@@ -725,7 +726,7 @@ The following table explains the purpose of each file and directory within the s
 
 #### Environment Setup
 Run the following commands to prepare environment before compiling and running the program:
-
+```bash
 sudo apt install libpcap-dev libnet-dev iptables -y
 sudo iptables -F
 sudo apt install go 
@@ -737,24 +738,27 @@ Run the following to compile the victim and the commander:
 
 go build commander.go
 go build victim.go 
-
+```
 Or alternatively run the provided build.sh to compile both the victim and the commander as follows:
-
+```bash
 ./build 
+```
 
 #### Running Commander
 Ensure commander.json and commander executable are both present in the same directory. Run as follows:
-
+```bash
 sudo ./commander 
+```
 
 #### Running Victim
 Ensure victim.json and victim executable are both present in the same directory. Run as follows:
-
+```bash
 sudo ./victim
+```
 
 #### commander.json and victim.json
 As mentioned earlier, commander.json is required to be in the same directory as the command executable and the same rules apply to the victim. The structure of commander.json amd victim.json is as follows: 
-
+```json
 {
 	"IfaceStr": "<network adaptor to be used>",
 	"SrcMACStr": "<MAC address of network adaptor>",
@@ -764,6 +768,7 @@ As mentioned earlier, commander.json is required to be in the same directory as 
 	"SrcPortInt": 	"<port number>",
 	"DstPortInt": 	"<other side's port number>"
 }
+```
 
 #### Running Commander Example
 ![Example 1](./docs/images/1-example1.png)
